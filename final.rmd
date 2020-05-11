@@ -1,0 +1,71 @@
+---
+title: "Predicting Which NSF Projects Are Funded Most, by Discipline"
+author: "Kat Thompson"
+date: "4/30/2020"
+output: html_document
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+ 
+I'm going to try to see if I can accurately predict how much money is given to different research fields. I would love to see if a similar method could be used to predict which grants will be accepted and which will not, if we were given access to some of the un-chosen grant applications. As far as I can tell, there's no centralized, federal data on grants that weren't accepted for funding, which I would need to predict which ones are chosen. So instead, I will try to examine how funding is granted to those who are accepted.
+I'm going to examine NSF grant data from the fiscal year of 2016, and try to use it to predict general characteristics of 2017's funding for different fields.
+
+I'm not including 2019 because that fiscal year is still occurring, and due to the current coronavirus pandemic, grants for scientific investigation will probably go first and foremost to infectious disease researchers.
+First, I'm going to pull in the data to analyze, joining on relavent fields.
+```{r}
+library(tidyverse)
+library(readxl)
+library(sets)
+library(purrr)
+library(e1071)
+
+grants_2016 <- read_csv('nsf_grants.csv')
+
+descriptions <- read_xlsx('Data_Dictionary_Crosswalk.xlsx')
+
+```
+
+
+Next, I'm going to use a statistical method called a support vector machine, called one of the best "out of the box" classifiers for non-linear separable data. What does that mean?
+
+Let's take a small example. I'm using the iris dataset that comes with R. I'll do some quick data wrangling to make sure we use this--I cast Species as a factor so that we can use the different levels for classification, and so that it will use all other columns as dimensions to classify.
+
+```{r}
+
+iris <- iris %>% 
+  mutate(Species = as_factor(Species))
+attach(iris)
+
+
+
+example_svm <- svm(Species ~ ., iris, type = 'C')
+summary(example_svm)
+iris %>% 
+  ggplot(aes(x = Sepal.Length, y = Sepal.Width, colour = Species))+
+  geom_point()
+```
+In the plot above, you can see there's a definite cluster of red Setosa, while the blue Virginica and green Versicolor are mixed and not easibly separable by a line. The SVM is going to find a way of using all the variables involved to find a way to separate all colors distinctly.
+
+But that was the example--let's get to the actual analysis. 
+
+
+Here, I'm classifying the different fields receiving funding from the NSF, and trying to see if there is any way we can predict which fields obtain more money. So I'm using 'action_date'(the day the grant was approved), the start and end date of the granted period, and the amount of money distributed that fiscal year to the project. I'm then going to use 'cfda-title' as my collection of classes--these are all different fields of research.
+```{r}
+
+training <- grants_2016 %>%
+  select("action_date", "period_of_performance_start_date","period_of_performance_current_end_date", "cfda_title", "federal_action_obligation")
+attach(training)       
+x = subset(training, select = -cfda_title)
+y <- as.factor(cfda_title)
+svm_model <- svm(cfda_title ~ ., data = training, type = 'C')
+```
+
+```{r}
+plot(svm_model, training, action_date~federal_action_obligation)
+summary(svm_model)
+```
+
+
